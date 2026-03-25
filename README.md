@@ -1,39 +1,20 @@
-# Two Team League Website
+# Supabase Hookup Notes
 
-A polished, mobile-friendly website to run a 2-team cricket league registration and scheduling flow.
+The current UI works with browser local storage. When you are ready, wire Supabase in these steps:
 
-## What is implemented
+1. Create a Supabase project.
+2. Run `supabase/schema.sql` in the SQL editor.
+3. Copy `supabase/config.example.js` to `supabase/config.js` and add URL + anon key.
+4. Add `@supabase/supabase-js` and replace local `loadState/persist` calls in `app.js` with Supabase reads/writes.
 
-- Player registration with `name`, `contact`, and role:
-  - `batsman`
-  - `bowler`
-  - `batting_allrounder`
-  - `bowling_allrounder`
-- Role-priority lineup logic based on cricket conventions:
-  - batsman first
-  - allrounders in the middle
-  - bowlers last
-- Team split logic:
-  - even player count -> equal split
-  - odd player count -> one joker player who can play for both teams
-- Hard cap:
-  - 8 players max per team
-  - optional joker (max total registrations = 17)
-- Contact-verified role update
-- Team lock action (`Finalize & Lock Teams`) with persistent saved state
-- Bottom-right refresh mixup button for reshuffling current player pool
-- League schedule planner between 5:00 PM and 8:00 PM with:
-  - planning by overs or duration
-  - automatic best-of series suggestion
+## Suggested mapping
 
-## Run locally
+- `players` table stores all player registrations and role updates.
+- `league_state` stores lock state, generated teams, and schedule JSON.
 
-Open `index.html` directly in a browser.
+## Suggested client flow
 
-## Supabase-ready artifacts
-
-- `supabase/schema.sql`
-- `supabase/config.example.js`
-- `supabase/README.md`
-
-These files are ready so we can wire the DB layer next.
+- On page load: read `players` + latest `league_state`.
+- On add/update player: write to `players`, then recompute teams and update `league_state` if not locked.
+- On lock or mixup: update `league_state.teams` and `teams_locked`.
+- On schedule generate: update `league_state.schedule`.
