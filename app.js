@@ -27,6 +27,8 @@ const dom = {
   playerName: document.querySelector("#playerName"),
   playerContact: document.querySelector("#playerContact"),
   playerRole: document.querySelector("#playerRole"),
+  playerWeight: document.querySelector("#playerWeight"),
+  playerWeightValue: document.querySelector("#playerWeightValue"),
   oversInput: document.querySelector("#oversInput"),
   durationInput: document.querySelector("#durationInput"),
   roleModal: document.querySelector("#roleModal"),
@@ -35,6 +37,8 @@ const dom = {
   modalRoleForm: document.querySelector("#modalRoleForm"),
   modalContact: document.querySelector("#modalContact"),
   modalRole: document.querySelector("#modalRole"),
+  modalWeight: document.querySelector("#modalWeight"),
+  modalWeightValue: document.querySelector("#modalWeightValue"),
   adminToggleBtn: document.querySelector("#adminToggleBtn"),
   adminPanel: document.querySelector("#adminPanel"),
   adminCodeForm: document.querySelector("#adminCodeForm"),
@@ -75,6 +79,7 @@ function createInitialState() {
 let state = createInitialState();
 let supabaseClient = null;
 let supabaseReady = false;
+let supabaseSupportsWeight = false;
 let adminUnlocked = false;
 let activeRolePlayerId = null;
 let syncChain = Promise.resolve();
@@ -92,8 +97,8 @@ async function boot() {
   }
 
   hydrateScheduleInputs();
+  syncWeightIndicators();
   render();
-  setMessage(supabaseReady ? "Supabase connected. Ready to register players." : "Running in local mode. Ready to register players.", "success");
 }
 
 function bindEvents() {
@@ -109,6 +114,7 @@ function bindEvents() {
     const name = dom.playerName.value.trim();
     const contact = normalizeContact(dom.playerContact.value);
     const role = dom.playerRole.value;
+    const weight = normalizeWeight(dom.playerWeight.value);
 
     if (name.length < 2) {
       markFieldError(dom.playerName, "Enter at least 2 characters.");
@@ -124,6 +130,12 @@ function bindEvents() {
 
     if (!ROLE_META[role]) {
       markFieldError(dom.playerRole, "Select a valid role.");
+      setMessage("Please fix the highlighted field.", "error");
+      return;
+    }
+
+    if (!weight) {
+      markFieldError(dom.playerWeight, "Select a weight from 1 to 5.");
       setMessage("Please fix the highlighted field.", "error");
       return;
     }
@@ -145,6 +157,7 @@ function bindEvents() {
       name,
       contact,
       role,
+      weight,
       createdAt: now,
       updatedAt: now
     };
@@ -157,6 +170,8 @@ function bindEvents() {
     persistState();
     render();
     dom.registerForm.reset();
+    dom.playerWeight.value = "3";
+    syncWeightIndicators();
     setMessage(`${name} added to the draft pool.`, "success");
   });
 
@@ -193,6 +208,7 @@ function bindEvents() {
 
     const contact = normalizeContact(dom.modalContact.value);
     const role = dom.modalRole.value;
+    const weight = normalizeWeight(dom.modalWeight.value);
 
     if (!contact || contact.length < 10) {
       markFieldError(dom.modalContact, "Enter registered contact number.");
@@ -212,7 +228,14 @@ function bindEvents() {
       return;
     }
 
+    if (!weight) {
+      markFieldError(dom.modalWeight, "Choose weight from 1 to 5.");
+      setMessage("Please fix the highlighted field.", "error");
+      return;
+    }
+
     player.role = role;
+    player.weight = weight;
     player.updatedAt = new Date().toISOString();
 
     if (state.players.length > 1) {
@@ -289,6 +312,9 @@ function bindEvents() {
     dom.durationInput.disabled = byOvers;
     clearFieldError(byOvers ? dom.durationInput : dom.oversInput);
   });
+
+  dom.playerWeight.addEventListener("input", syncWeightIndicators);
+  dom.modalWeight.addEventListener("input", syncWeightIndicators);
 
   dom.adminToggleBtn.addEventListener("click", () => {
     dom.adminPanel.classList.toggle("hidden");
@@ -398,6 +424,8 @@ function openRoleModal(playerId) {
   dom.roleModalPlayer.textContent = `${player.name} (${ROLE_META[player.role]?.label || player.role})`;
   dom.modalContact.value = "";
   dom.modalRole.value = player.role;
+  dom.modalWeight.value = String(player.weight || 3);
+  syncWeightIndicators();
   clearFormValidation(dom.modalRoleForm);
   dom.roleModal.classList.remove("hidden");
 }
@@ -467,50 +495,49 @@ function generateTeams(players) {
     throw new Error("Team capacity exceeded. Maximum allowed is 17 players including joker.");
   }
 
+  const normalizedPlayers = players.map((player) => normalizePlayer(player));
   const seed = Date.now() + Math.floor(Math.random() * 1000);
   const rng = mulberry32(seed);
-  const orderedPool = buildRoleOrderedPool(players, rng);
 
+  let playerPool = [...normalizedPlayers];
   let joker = null;
-  if (orderedPool.length % 2 === 1) {
-    const jokerIndex = Math.floor(rng() * orderedPool.length);
-    joker = orderedPool.splice(jokerIndex, 1)[0];
+  if (playerPool.length % 2 === 1) {
+    joker = chooseJoker(playerPool);
+    playerPool = playerPool.filter((player) => player.id !== joker.id);
   }
 
-  const splitSize = orderedPool.length / 2;
+  const splitSize = playerPool.length / 2;
   if (splitSize > 8) {
     throw new Error("Each team can have a maximum of 8 players.");
   }
-
-  const teamA = [];
-  const teamB = [];
-  orderedPool.forEach((player, index) => {
-    if (teamA.length >= splitSize) {
-      teamB.push(player);
-      return;
-    }
-    if (teamB.length >= splitSize) {
-      teamA.push(player);
-      return;
-    }
-
-    if (index % 2 === 0) {
-      teamA.push(player);
-    } else {
-      teamB.push(player);
-    }
-  });
+  const allocation = allocateByRoleAndWeight(playerPool, splitSize, rng);
 
   return {
-    teamA: sortLineup(teamA),
-    teamB: sortLineup(teamB),
+    teamA: sortLineup(allocation.teamA),
+    teamB: sortLineup(allocation.teamB),
     joker,
     seed,
     generatedAt: new Date().toISOString()
   };
 }
 
-function buildRoleOrderedPool(players, rng) {
+function chooseJoker(players) {
+  return [...players].sort((playerA, playerB) => {
+    const weightDiff = (playerA.weight || 3) - (playerB.weight || 3);
+    if (weightDiff !== 0) {
+      return weightDiff;
+    }
+
+    const roleDiff = ROLE_META[playerB.role].priority - ROLE_META[playerA.role].priority;
+    if (roleDiff !== 0) {
+      return roleDiff;
+    }
+
+    return playerA.name.localeCompare(playerB.name);
+  })[0];
+}
+
+function allocateByRoleAndWeight(players, splitSize, rng) {
   const grouped = ROLE_ORDER.reduce((accumulator, role) => {
     accumulator[role] = [];
     return accumulator;
@@ -520,13 +547,93 @@ function buildRoleOrderedPool(players, rng) {
     grouped[player.role].push(player);
   });
 
-  const ordered = [];
   ROLE_ORDER.forEach((role) => {
-    const shuffled = shuffle([...grouped[role]], rng);
-    ordered.push(...shuffled);
+    grouped[role].sort((playerA, playerB) => {
+      const weightDiff = (playerB.weight || 3) - (playerA.weight || 3);
+      if (weightDiff !== 0) {
+        return weightDiff;
+      }
+      return playerA.name.localeCompare(playerB.name);
+    });
   });
 
-  return ordered;
+  const teamA = [];
+  const teamB = [];
+  const roleCountA = createRoleCounter();
+  const roleCountB = createRoleCounter();
+  let totalWeightA = 0;
+  let totalWeightB = 0;
+
+  ROLE_ORDER.forEach((role) => {
+    grouped[role].forEach((player) => {
+      const canA = teamA.length < splitSize;
+      const canB = teamB.length < splitSize;
+
+      if (canA && !canB) {
+        teamA.push(player);
+        roleCountA[role] += 1;
+        totalWeightA += player.weight || 3;
+        return;
+      }
+
+      if (!canA && canB) {
+        teamB.push(player);
+        roleCountB[role] += 1;
+        totalWeightB += player.weight || 3;
+        return;
+      }
+
+      const roleGapA = roleCountA[role];
+      const roleGapB = roleCountB[role];
+
+      if (roleGapA < roleGapB) {
+        teamA.push(player);
+        roleCountA[role] += 1;
+        totalWeightA += player.weight || 3;
+        return;
+      }
+
+      if (roleGapB < roleGapA) {
+        teamB.push(player);
+        roleCountB[role] += 1;
+        totalWeightB += player.weight || 3;
+        return;
+      }
+
+      if (totalWeightA < totalWeightB) {
+        teamA.push(player);
+        roleCountA[role] += 1;
+        totalWeightA += player.weight || 3;
+        return;
+      }
+
+      if (totalWeightB < totalWeightA) {
+        teamB.push(player);
+        roleCountB[role] += 1;
+        totalWeightB += player.weight || 3;
+        return;
+      }
+
+      if (rng() >= 0.5) {
+        teamA.push(player);
+        roleCountA[role] += 1;
+        totalWeightA += player.weight || 3;
+      } else {
+        teamB.push(player);
+        roleCountB[role] += 1;
+        totalWeightB += player.weight || 3;
+      }
+    });
+  });
+
+  return { teamA, teamB };
+}
+
+function createRoleCounter() {
+  return ROLE_ORDER.reduce((counter, role) => {
+    counter[role] = 0;
+    return counter;
+  }, {});
 }
 
 function sortLineup(players) {
@@ -534,6 +641,10 @@ function sortLineup(players) {
     const diff = ROLE_META[playerA.role].priority - ROLE_META[playerB.role].priority;
     if (diff !== 0) {
       return diff;
+    }
+    const weightDiff = (playerB.weight || 3) - (playerA.weight || 3);
+    if (weightDiff !== 0) {
+      return weightDiff;
     }
     return playerA.name.localeCompare(playerB.name);
   });
@@ -687,15 +798,29 @@ function renderLineup(players) {
 function renderPlayerTile(player, index, isJoker) {
   const roleLabel = ROLE_META[player.role]?.label || player.role;
   const badgeClass = `role-${player.role}`;
+  const rating = player.weight || 3;
   return `
     <button class="player-tile" type="button" data-player-id="${player.id}">
       <span class="player-left">
         <span class="player-index">${isJoker ? "J" : index}</span>
         <span class="player-name">${escapeHtml(player.name)}</span>
       </span>
-      <span class="role-badge ${badgeClass}">${escapeHtml(roleLabel)}</span>
+      <span class="player-right">
+        ${renderRatingDots(rating)}
+        <span class="role-badge ${badgeClass}">${escapeHtml(roleLabel)}</span>
+      </span>
     </button>
   `;
+}
+
+function renderRatingDots(rating) {
+  const safeRating = Math.max(1, Math.min(5, Number(rating) || 3));
+  const dots = Array.from({ length: 5 }, (_, index) => {
+    const filledClass = index < safeRating ? "is-filled" : "";
+    return `<span class="rating-dot ${filledClass}" aria-hidden="true"></span>`;
+  }).join("");
+
+  return `<span class="rating-dots" aria-label="Cricket rating ${safeRating} out of 5">${dots}</span>`;
 }
 
 function renderSchedule() {
@@ -739,7 +864,9 @@ function renderLockedState() {
 function renderAdminOptions() {
   const options = ["<option value=''>Select</option>"];
   state.players.forEach((player) => {
-    options.push(`<option value="${player.id}">${escapeHtml(player.name)} (${ROLE_META[player.role].label})</option>`);
+    options.push(
+      `<option value="${player.id}">${escapeHtml(player.name)} (${ROLE_META[player.role].label}, W${player.weight || 3})</option>`
+    );
   });
 
   const html = options.join("");
@@ -772,6 +899,16 @@ function setMessage(text, type = "") {
   dom.appMessage.classList.remove("success", "error");
   if (type) {
     dom.appMessage.classList.add(type);
+  }
+}
+
+function syncWeightIndicators() {
+  if (dom.playerWeightValue) {
+    dom.playerWeightValue.textContent = String(normalizeWeight(dom.playerWeight.value) || 3);
+  }
+
+  if (dom.modalWeightValue) {
+    dom.modalWeightValue.textContent = String(normalizeWeight(dom.modalWeight.value) || 3);
   }
 }
 
@@ -847,7 +984,7 @@ function loadLocalState() {
     return {
       ...fallback,
       ...parsed,
-      players: Array.isArray(parsed.players) ? parsed.players : [],
+      players: Array.isArray(parsed.players) ? parsed.players.map((player) => normalizePlayer(player)) : [],
       teams: sanitizeTeams(parsed.teams),
       schedule: sanitizeSchedule(parsed.schedule)
     };
@@ -864,9 +1001,9 @@ function sanitizeTeams(rawTeams) {
   }
 
   return {
-    teamA: Array.isArray(rawTeams.teamA) ? rawTeams.teamA : [],
-    teamB: Array.isArray(rawTeams.teamB) ? rawTeams.teamB : [],
-    joker: rawTeams.joker && typeof rawTeams.joker === "object" ? rawTeams.joker : null,
+    teamA: Array.isArray(rawTeams.teamA) ? rawTeams.teamA.map((player) => normalizePlayer(player)) : [],
+    teamB: Array.isArray(rawTeams.teamB) ? rawTeams.teamB.map((player) => normalizePlayer(player)) : [],
+    joker: rawTeams.joker && typeof rawTeams.joker === "object" ? normalizePlayer(rawTeams.joker) : null,
     seed: rawTeams.seed || null,
     generatedAt: rawTeams.generatedAt || null
   };
@@ -901,9 +1038,20 @@ async function initializeSupabase() {
 
     supabaseClient = createClient(url, key);
     supabaseReady = true;
+    supabaseSupportsWeight = await detectSupabaseWeightSupport();
   } catch (error) {
     console.warn("Supabase client not initialized. Local mode enabled.", error);
     supabaseReady = false;
+    supabaseSupportsWeight = false;
+  }
+}
+
+async function detectSupabaseWeightSupport() {
+  try {
+    const { error } = await supabaseClient.from("players").select("role_weight").limit(1);
+    return !error;
+  } catch (_error) {
+    return false;
   }
 }
 
@@ -927,10 +1075,12 @@ async function loadInitialState() {
       throw leagueResponse.error;
     }
 
+    const remotePlayers = Array.isArray(playersResponse.data) ? playersResponse.data.map(mapPlayerRowToState) : [];
+
     const merged = {
       ...createInitialState(),
       ...localState,
-      players: Array.isArray(playersResponse.data) ? playersResponse.data.map(mapPlayerRowToState) : []
+      players: remotePlayers
     };
 
     const remoteLeague = Array.isArray(leagueResponse.data) ? leagueResponse.data[0] : null;
@@ -940,6 +1090,7 @@ async function loadInitialState() {
       merged.teamsLockedAt = remoteLeague.teams_locked_at || null;
       merged.teams = sanitizeTeams(remoteLeague.teams);
       merged.schedule = sanitizeSchedule(remoteLeague.schedule);
+      merged.players = backfillPlayerWeightsFromTeams(remotePlayers, merged.teams);
     }
 
     persistLocalState(merged);
@@ -1016,7 +1167,7 @@ async function syncSnapshotToSupabase(snapshot) {
 }
 
 function mapPlayerStateToRow(player) {
-  return {
+  const payload = {
     id: player.id,
     name: player.name,
     contact: player.contact,
@@ -1024,21 +1175,53 @@ function mapPlayerStateToRow(player) {
     created_at: player.createdAt,
     updated_at: player.updatedAt
   };
+
+  if (supabaseSupportsWeight) {
+    payload.role_weight = normalizeWeight(player.weight) || 3;
+  }
+
+  return payload;
 }
 
 function mapPlayerRowToState(row) {
-  return {
+  return normalizePlayer({
     id: row.id,
     name: row.name,
     contact: row.contact,
     role: row.role,
+    weight: row.role_weight,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  };
+  });
 }
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizePlayer(player) {
+  return {
+    ...player,
+    weight: normalizeWeight(player?.weight) || 3
+  };
+}
+
+function backfillPlayerWeightsFromTeams(players, teams) {
+  const weightById = new Map();
+  [...(teams.teamA || []), ...(teams.teamB || [])].forEach((player) => {
+    if (player?.id) {
+      weightById.set(player.id, normalizeWeight(player.weight) || 3);
+    }
+  });
+
+  if (teams.joker?.id) {
+    weightById.set(teams.joker.id, normalizeWeight(teams.joker.weight) || 3);
+  }
+
+  return players.map((player) => ({
+    ...normalizePlayer(player),
+    weight: normalizeWeight(player.weight) || weightById.get(player.id) || 3
+  }));
 }
 
 function shuffle(collection, rng) {
@@ -1061,6 +1244,14 @@ function mulberry32(seed) {
 
 function normalizeContact(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 15);
+}
+
+function normalizeWeight(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+    return null;
+  }
+  return parsed;
 }
 
 function escapeHtml(text) {

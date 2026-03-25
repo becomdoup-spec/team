@@ -66,7 +66,7 @@
                 />
               </label>
 
-              <label class="full-width">
+              <label>
                 Role
                 <select id="playerRole" required>
                   <option value="">Select role</option>
@@ -75,6 +75,24 @@
                   <option value="bowling_allrounder">Bowling Allrounder</option>
                   <option value="bowler">Bowler</option>
                 </select>
+              </label>
+
+              <label class="rating-label">
+                Cricket Rating (1 to 5)
+                <div class="rating-row">
+                  <span class="rating-edge">Low</span>
+                  <input
+                    id="playerWeight"
+                    type="range"
+                    min="1"
+                    max="5"
+                    step="1"
+                    value="3"
+                    aria-label="Cricket rating from 1 to 5"
+                  />
+                  <span class="rating-edge">High</span>
+                </div>
+                <small class="rating-value">Selected: <span id="playerWeightValue">3</span>/5</small>
               </label>
 
               <button type="submit" class="btn btn-primary">Add Player</button>
@@ -233,6 +251,23 @@
               <option value="bowling_allrounder">Bowling Allrounder</option>
               <option value="bowler">Bowler</option>
             </select>
+          </label>
+          <label class="rating-label">
+            New Cricket Rating (1 to 5)
+            <div class="rating-row">
+              <span class="rating-edge">Low</span>
+              <input
+                id="modalWeight"
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value="3"
+                aria-label="New cricket rating from 1 to 5"
+              />
+              <span class="rating-edge">High</span>
+            </div>
+            <small class="rating-value">Selected: <span id="modalWeightValue">3</span>/5</small>
           </label>
           <button type="submit" class="btn btn-primary">Unlock & Update</button>
         </form>
