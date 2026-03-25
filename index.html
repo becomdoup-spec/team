@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Two Team League Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-shapes" aria-hidden="true">
+      <span class="shape shape-one"></span>
+      <span class="shape shape-two"></span>
+      <span class="shape shape-three"></span>
+    </div>
+
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">League Hub</p>
+        <h1>Two Team Cricket League</h1>
+        <p class="hero-copy">
+          Register players, lock balanced teams, keep one joker for odd totals, and run best-of
+          match schedules between 5:00 PM and 8:00 PM.
+        </p>
+        <div class="hero-metrics" id="heroMetrics"></div>
+      </header>
+
+      <section class="card card-register">
+        <div class="register-layout">
+          <div>
+            <h2>Player Registration</h2>
+            <p>Compact entry flow. Add player info quickly and keep momentum high.</p>
+
+            <form id="registerForm" class="form-grid compact-form" autocomplete="off">
+              <label>
+                Name
+                <input
+                  id="playerName"
+                  type="text"
+                  maxlength="40"
+                  placeholder="Player full name"
+                  autocapitalize="words"
+                  enterkeyhint="next"
+                  required
+                />
+              </label>
+
+              <label>
+                Contact
+                <input
+                  id="playerContact"
+                  type="tel"
+                  maxlength="15"
+                  placeholder="10-digit contact"
+                  inputmode="numeric"
+                  enterkeyhint="next"
+                  required
+                />
+              </label>
+
+              <label class="full-width">
+                Role
+                <select id="playerRole" required>
+                  <option value="">Select role</option>
+                  <option value="batsman">Batsman</option>
+                  <option value="batting_allrounder">Batting Allrounder</option>
+                  <option value="bowling_allrounder">Bowling Allrounder</option>
+                  <option value="bowler">Bowler</option>
+                </select>
+              </label>
+
+              <button type="submit" class="btn btn-primary">Add Player</button>
+            </form>
+          </div>
+
+          <aside class="hype-panel">
+            <h3>Live Draft Energy</h3>
+            <p id="hypeText" class="hype-text">Start adding players and build the matchup.</p>
+            <div class="progress-shell" aria-hidden="true">
+              <div id="fillProgress" class="progress-fill"></div>
+            </div>
+            <ul id="recentPlayers" class="recent-players"></ul>
+          </aside>
+        </div>
+      </section>
+
+      <section class="card card-teams">
+        <div class="teams-header">
+          <div>
+            <h2>Team Allocation</h2>
+            <p>
+              Click any player card to unlock role update (contact verification required).
+              Role order follows cricket convention.
+            </p>
+          </div>
+          <button id="lockBtn" class="btn btn-accent" type="button">Finalize & Lock Teams</button>
+        </div>
+
+        <div class="team-grid">
+          <article class="team-panel">
+            <h3>Team A</h3>
+            <ol id="teamAList" class="lineup-list"></ol>
+          </article>
+          <article class="team-panel">
+            <h3>Team B</h3>
+            <ol id="teamBList" class="lineup-list"></ol>
+          </article>
+        </div>
+
+        <article class="joker-panel">
+          <h3>Joker Player (Plays for Both Teams)</h3>
+          <div id="jokerSlot" class="joker-slot">No joker assigned</div>
+        </article>
+      </section>
+
+      <section class="card card-schedule">
+        <h2>League Schedule Planner</h2>
+        <p>
+          Schedule window is fixed between <strong>5:00 PM</strong> and <strong>8:00 PM</strong>. Choose
+          match duration mode and generate a best-of series.
+        </p>
+
+        <form id="scheduleForm" class="schedule-form">
+          <div class="radio-row">
+            <label>
+              <input type="radio" name="scheduleMode" value="overs" checked /> Plan by overs
+            </label>
+            <label>
+              <input type="radio" name="scheduleMode" value="duration" /> Plan by match duration
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Overs per Match
+              <input id="oversInput" type="number" min="2" max="30" value="10" inputmode="numeric" />
+            </label>
+            <label>
+              Match Duration (minutes)
+              <input id="durationInput" type="number" min="20" max="180" value="60" inputmode="numeric" disabled />
+            </label>
+            <button type="submit" class="btn btn-primary">Generate Schedule</button>
+          </div>
+        </form>
+
+        <div class="schedule-meta" id="scheduleMeta"></div>
+        <ul id="scheduleList" class="schedule-list"></ul>
+      </section>
+
+      <p id="appMessage" class="app-message" role="status" aria-live="polite"></p>
+    </main>
+
+    <button id="adminToggleBtn" class="admin-fab" title="Admin controls" aria-label="Admin controls" type="button">
+      A
+    </button>
+
+    <aside id="adminPanel" class="admin-panel hidden">
+      <h3>Admin Control</h3>
+
+      <form id="adminCodeForm" class="admin-code-form" autocomplete="off">
+        <label>
+          Enter Admin Code
+          <input
+            id="adminCodeInput"
+            type="password"
+            maxlength="4"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="Enter 4-digit code"
+            required
+          />
+        </label>
+        <button class="btn btn-secondary" type="submit">Unlock</button>
+      </form>
+
+      <div id="adminActions" class="admin-actions hidden">
+        <label>
+          Delete Player
+          <select id="adminDeletePlayer"></select>
+        </label>
+        <button id="adminDeleteBtn" class="btn btn-secondary" type="button">Delete</button>
+
+        <label>
+          Swap Player 1
+          <select id="adminSwapA"></select>
+        </label>
+        <label>
+          Swap Player 2
+          <select id="adminSwapB"></select>
+        </label>
+        <button id="adminSwapBtn" class="btn btn-accent" type="button">Swap Players</button>
+        <button id="adminMixupBtn" class="btn btn-primary" type="button">Refresh Mixup</button>
+      </div>
+    </aside>
+
+    <div id="roleModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="roleModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="roleModalTitle">Update Player Role</h3>
+          <button id="roleModalClose" type="button" class="modal-close" aria-label="Close role update">x</button>
+        </div>
+
+        <p id="roleModalPlayer" class="modal-player"></p>
+        <p class="modal-note">Enter the registered contact of this player to unlock role update.</p>
+
+        <form id="modalRoleForm" class="form-grid compact-form" autocomplete="off">
+          <label>
+            Registered Contact
+            <input
+              id="modalContact"
+              type="tel"
+              maxlength="15"
+              inputmode="numeric"
+              enterkeyhint="next"
+              placeholder="Enter contact"
+              required
+            />
+          </label>
+          <label>
+            New Role
+            <select id="modalRole" required>
+              <option value="">Choose new role</option>
+              <option value="batsman">Batsman</option>
+              <option value="batting_allrounder">Batting Allrounder</option>
+              <option value="bowling_allrounder">Bowling Allrounder</option>
+              <option value="bowler">Bowler</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn-primary">Unlock & Update</button>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
