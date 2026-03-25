@@ -889,7 +889,7 @@ async function initializeSupabase() {
   try {
     const [{ createClient }, configModule] = await Promise.all([
       import("https://esm.sh/@supabase/supabase-js@2"),
-      import("./supabase/config.js")
+      import("./config.js")
     ]);
 
     const url = configModule.SUPABASE_URL;
